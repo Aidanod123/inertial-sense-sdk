@@ -2466,18 +2466,18 @@ rclcpp::Time InertialSenseROS::ros_time_from_week_and_tow(const uint32_t week, c
     else
     {
         // Otherwise, estimate the IMX boot time and offset the messages
-        if (!got_first_message_)
+        if (!got_first_tow_message_)
         {
-            got_first_message_ = true;
-            INS_local_offset_ = nh_->now().seconds() - timeOfWeek;
+            got_first_tow_message_ = true;
+            INS_tow_local_offset_ = nh_->now().seconds() - timeOfWeek;
         }
         else // low-pass filter offset to account for drift
         {
             double y_offset = nh_->now().seconds() - timeOfWeek;
-            INS_local_offset_ = 0.005 * y_offset + 0.995 * INS_local_offset_;
+            INS_tow_local_offset_ = 0.005 * y_offset + 0.995 * INS_tow_local_offset_;
         }
-        // Publish with ROS time
-        rostime = rclcpp::Time(INS_local_offset_ + timeOfWeek);
+        // The single-argument ROS 2 constructor takes nanoseconds, not seconds.
+        rostime = rclcpp::Time(static_cast<int64_t>((INS_tow_local_offset_ + timeOfWeek) * 1e9));
     }
     return rostime;
 }
@@ -2507,8 +2507,8 @@ rclcpp::Time InertialSenseROS::ros_time_from_start_time(const double time)
             double y_offset = nh_->now().seconds() - time;
             INS_local_offset_ = 0.005 * y_offset + 0.995 * INS_local_offset_;
         }
-        // Publish with ROS time
-        rostime = rclcpp::Time(INS_local_offset_ + time);
+        // The single-argument ROS 2 constructor takes nanoseconds, not seconds.
+        rostime = rclcpp::Time(static_cast<int64_t>((INS_local_offset_ + time) * 1e9));
     }
     return rostime;
 }
@@ -2520,7 +2520,9 @@ rclcpp::Time InertialSenseROS::ros_time_from_tow(const double tow)
 
 double InertialSenseROS::tow_from_ros_time(const rclcpp::Time &rt)
 {
-    return ((uint64_t)rt.seconds() - UNIX_TO_GPS_OFFSET - GPS_week_ * 604800) + rt.nanoseconds() * 1.0e-9;
+    // seconds() already includes the fractional part; nanoseconds() is the full
+    // epoch timestamp, not just its subsecond component.
+    return rt.seconds() - UNIX_TO_GPS_OFFSET - GPS_week_ * 604800.0;
 }
 
 rclcpp::Time InertialSenseROS::ros_time_from_gtime(const uint64_t sec, double subsec)
@@ -2607,5 +2609,4 @@ void InertialSenseROS::transform_6x6_covariance(float Pout[36], float Pin[36], i
         }
     }
 }
-
 

@@ -8,7 +8,7 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "../include/inertial_sense_ros.h"
+#include "inertial_sense_ros.h"
 
 #define PARAM_YAML_FILE "./src/ros2/launch/test_config.yaml"
 
@@ -324,6 +324,44 @@ TEST(BasicTestSuite, test_topic_helper)
     EXPECT_EQ(strobe.period, 1);
 }
 
+
+TEST(TimeAlignment, BootFallbackUsesHostEpoch)
+{
+    InertialSenseROS driver;
+    const double before = driver.nh_->now().seconds();
+    const auto stamp = driver.ros_time_from_start_time(12.25);
+    const double after = driver.nh_->now().seconds();
+    EXPECT_GE(stamp.seconds(), before - 1e-6);
+    EXPECT_LE(stamp.seconds(), after + 1e-6);
+}
+
+TEST(TimeAlignment, InterleavedFallbackClocksStayIndependent)
+{
+    InertialSenseROS driver;
+    const double before = driver.nh_->now().seconds();
+    const auto tow_first = driver.ros_time_from_week_and_tow(0, 300000.25);
+    const auto boot = driver.ros_time_from_start_time(12.25);
+    const auto tow_second = driver.ros_time_from_week_and_tow(0, 300000.25);
+    const double after = driver.nh_->now().seconds();
+    for (const auto &stamp : {tow_first, boot, tow_second}) {
+        EXPECT_GE(stamp.seconds(), before - 1e-6);
+        EXPECT_LE(stamp.seconds(), after + 1e-6);
+    }
+}
+
+TEST(TimeAlignment, GpsSynchronizedStreamsAgreeAndRoundTrip)
+{
+    InertialSenseROS driver;
+    driver.GPS_week_ = 2440;
+    driver.GPS_towOffset_ = 200000.0;
+    const double boot_time = 12.25;
+    const double tow = boot_time + driver.GPS_towOffset_;
+    const auto boot_stamp = driver.ros_time_from_start_time(boot_time);
+    const auto tow_stamp = driver.ros_time_from_week_and_tow(driver.GPS_week_, tow);
+    EXPECT_EQ(boot_stamp.nanoseconds(), tow_stamp.nanoseconds());
+    EXPECT_NEAR(tow_stamp.seconds(), UNIX_TO_GPS_OFFSET + 2440.0 * 604800 + tow, 1e-6);
+    EXPECT_NEAR(driver.tow_from_ros_time(tow_stamp), tow, 1e-6);
+}
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

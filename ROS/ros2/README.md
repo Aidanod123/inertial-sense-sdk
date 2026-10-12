@@ -44,7 +44,13 @@ ln -s inertial-sense-sdk/ROS/ros2
 then, create a symbolic link to the `ROS/ros2` directory in the `ros2_ws/src` directory using the command `ln -s inertial-sense-sdk/ROS/ros2` (run this from `ros2_ws/src`). This
 allows `colcon build` to find the appropriate package to build.
 
-Return to the `ros2_ws/src` directory and run `colcon build`.
+Build from the workspace root with `colcon build --packages-select inertial_sense_ros2`.
+The ROS package builds the SDK as a native CMake target in its build directory.
+A prebuilt source-tree archive, the `ros2` symlink, and the SDK's Python/venv build
+scripts are not required. Incremental builds track the SDK target's dependencies.
+ROS include paths come from the discovered packages rather than `/opt/ros/jazzy`.
+Unit-test dependencies are loaded only with `BUILD_TESTING=ON`; the test binary is
+kept in the build directory. Hardware/RTK tests require their devices or server.
 
 For ROS2 to run properly, `. install/setup.bash` in the ROS2 workspace (ros2_ws) must be run to add necessary environment variables. 
 
@@ -90,6 +96,13 @@ ros2 run inertial_sense_ros2 new_target "[path to YAML parameter file]"
 If GPS is available, all header timestamps are calculated with respect to the GPS clock but are translated into UNIX time to be consistent with the other topics in a ROS network.  If GPS is unavailable, then a constant offset between IMX time and system time is estimated during operation and is applied to IMU and INS message timestamps as they arrive.  There is often a small drift in these timestamps (on the order of a microsecond per second) due to variance in measurement streams and the difference between IMX and system clocks, however this is more accurate than stamping the measurements with ROS time as they arrive.  
 
 Ideally there should be no jump in timestamps when GPS is first acquired because the timestamps should be identical.  However, due to inaccuracies in the system time, there will likely be a small jump in message timestamps after the first GPS fix.
+
+The ROS 2 fallback converts estimated epoch seconds explicitly to nanoseconds.
+Before GPS synchronization, time-of-week and time-since-boot use independent
+offset estimates so interleaved sensor streams do not contaminate each other's
+timestamps. GPS-derived timestamps still require the computer and other device
+clocks to be aligned when combining their data. Software launch times do not
+provide that clock alignment.
 
 ## Topics
 
